@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  aaa
+Metadata:
+  Identifier: cw-mf-KMS
+  CreatedOn: 2021/08/8
+  CreatedBy: Nick The Security Dude
+Resources:
+
+  rCISKey:
+    Type: AWS::KMS::Key
+    Properties: 
+      EnableKeyRotation: true
+      KeyPolicy:
+        Id: key-consolepolicy-3
+        Version: 2012-10-17
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Enable CloudWatch Logs Permissions
+            Effect: Allow
+            Principal:
+              Service: 
+                - !Sub logs.${AWS::Region}.amazonaws.com
+                - cloudtrail.amazonaws.com
+            Action: 
+              - kms:Encrypt*
+              - kms:Decrypt*
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: '*'
+
+  rCISKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties: 
+      AliasName: alias/cloudwatch/metricfilter/cis/key
+      TargetKeyId: !Ref rCISKey
+
+  rCISKeySSM:
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Name: /cloudwatch/metricfilter/cis/key
+      Value: !Ref rCISKey
+      Type: String
+

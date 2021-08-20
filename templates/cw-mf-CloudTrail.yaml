@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  aaa
+Metadata:
+  Identifier: cw-mf-MetricFilter
+  CreatedOn: 2021/08/8
+  CreatedBy: Nick The Security Dude
+
+Parameters:
+
+  pLogGroupName:
+    Type: String
+  pOrgId:
+    Type: String
+
+Resources:
+
+  rCloudTrailAccessLogsS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: LogDeliveryWrite
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  rCloudTrailS3Bucket:
+    DependsOn: rCloudTrailAccessLogsS3Bucket
+    Type: AWS::S3::Bucket
+    Properties: 
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: 
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration: 
+        DestinationBucketName: !Ref rCloudTrailAccessLogsS3Bucket
+
+  rCloudTrailS3BucketPol:
+    Type: AWS::S3::BucketPolicy
+    Properties: 
+      Bucket: !Ref rCloudTrailS3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSCloudTrailAclCheck20150319
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 's3:GetBucketAcl'
+            Resource: !Sub 'arn:aws:s3:::${rCloudTrailS3Bucket}'
+          - Sid: AWSCloudTrailWrite20150319
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${rCloudTrailS3Bucket}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': bucket-owner-full-control            
+
+  rCWRole:
+    DependsOn: rCloudTrailS3BucketPol
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: CloudTrailAssumeRole
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 'sts:AssumeRole'
+      RoleName: !Sub CloudWatchRoleForCloudTrail-${pLogGroupName}
+
+  rCWRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      ManagedPolicyName: !Sub CWRolePolicy-${pLogGroupName}
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSCloudTrailCreateLogStream2014110
+            Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${pLogGroupName}:*'
+          - Sid: AWSCloudTrailPutLogEvents20141101
+            Effect: Allow
+            Action:
+              - 'logs:PutLogEvents'
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${pLogGroupName}:*'
+      Roles: 
+        -  !Ref rCWRole
+
+  rCWMFTrail:  
+    DependsOn: rCWRolePolicy
+    Type: AWS::CloudTrail::Trail
+    Properties: 
+      CloudWatchLogsLogGroupArn: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${pLogGroupName}:*'
+      CloudWatchLogsRoleArn: !GetAtt rCWRole.Arn
+      IsLogging: true
+      IncludeGlobalServiceEvents: true
+      IsMultiRegionTrail: true
+      EnableLogFileValidation: true
+      KMSKeyId: !Join
+        - ''
+        - - !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/'
+          - '{{resolve:ssm:/cloudwatch/metricfilter/cis/key:1}}'
+      S3BucketName: !Ref rCloudTrailS3Bucket
+      TrailName: !Sub CloudTrailForCloudWatch-${pLogGroupName}

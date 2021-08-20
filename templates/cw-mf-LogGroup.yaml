@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  aaa
+Metadata:
+  Identifier: cw-mf-MetricFilter
+  CreatedOn: 2021/08/8
+  CreatedBy: Nick The Security Dude
+Parameters:
+  pLogGroupName:
+    Type: String
+Resources:
+
+  rCISLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      KmsKeyId: !Join
+        - ''
+        - - !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/
+          - '{{resolve:ssm:/cloudwatch/metricfilter/cis/key:1}}'
+      LogGroupName: !Ref pLogGroupName
+      RetentionInDays: 60
+
+

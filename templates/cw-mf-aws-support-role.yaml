@@ -1,0 +1,14 @@
+Resources:
+  #AWS Support iam role
+  rAWSSupportRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AssumeRole
+            Effect: Allow
+            Principal:
+              AWS: !Sub ${AWS::AccountId}
+            Action: 'sts:AssumeRole'
+

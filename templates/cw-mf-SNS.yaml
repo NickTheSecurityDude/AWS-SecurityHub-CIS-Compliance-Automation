@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  aaa
+Metadata:
+  Identifier: cw-mf-MetricFilter
+  CreatedOn: 2021/08/8
+  CreatedBy: Nick The Security Dude
+Parameters:
+  pSNSAlarmTopicName:
+    Type: String
+Resources:
+
+  rCISSNSAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties: 
+      TopicName: !Ref pSNSAlarmTopicName
+

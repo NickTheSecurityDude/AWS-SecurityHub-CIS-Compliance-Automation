@@ -1,0 +1,125 @@
+
+Resources:
+
+  #vpc
+  rLambdaVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 172.30.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: 
+        - Key: Name
+          Value: LambdaCTVPC
+
+  #vpc flowlog cloudwatch loggroup
+  rLambdaVPCFlowLogCWLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Join
+        - ''
+        - - !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/
+          - '{{resolve:ssm:/cloudwatch/metricfilter/cis/key:1}}'
+      RetentionInDays: 60
+
+  #vpc flowlog cloudwatch iam role
+  rLambdaVPCFlowLogCWLogGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VPCFlogLogAssumeRole
+            Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  rLambdaVPCFlowLogCWLogGroupRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VPCFlowLogCreateLogStream2014110
+            Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+      Roles:
+        -  !Ref rLambdaVPCFlowLogCWLogGroupRole
+
+  #vpc flowlog
+  rLambdaVPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties: 
+      DeliverLogsPermissionArn: !GetAtt rLambdaVPCFlowLogCWLogGroupRole.Arn
+      LogDestination: !GetAtt rLambdaVPCFlowLogCWLogGroup.Arn
+      LogDestinationType: cloud-watch-logs
+      ResourceId: !Ref rLambdaVPC
+      ResourceType: VPC
+      TrafficType: ALL
+
+  #3 subnets
+  rLambdaSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Sub ${AWS::Region}a
+      CidrBlock: 172.30.0.0/24
+      VpcId: !Ref rLambdaVPC
+
+  rLambdaSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub ${AWS::Region}b
+      CidrBlock: 172.30.1.0/24
+      VpcId: !Ref rLambdaVPC
+
+  rLambdaSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub ${AWS::Region}c
+      CidrBlock: 172.30.2.0/24
+      VpcId: !Ref rLambdaVPC
+
+  #sg
+  rLambdaSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Security Group for Control Tower Lambda
+      GroupName: CTLambdaSG
+      SecurityGroupEgress: 
+        -   
+          CidrIp: 0.0.0.0/0
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+      Tags: 
+        - Key: Name
+          Value: LambdaVPC
+      VpcId: !Ref rLambdaVPC
+
+  #ssm for sg
+  rLambdaSGSSM:
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Name: /security-group/lambda/controltower
+      Value: !Ref rLambdaSG
+      Type: String
+
+  #vpc endpoint 
+  rSNSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      VpcId: !Ref rLambdaVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: 
+        - !Ref rLambdaSubnet1
+        - !Ref rLambdaSubnet2
+        - !Ref rLambdaSubnet3
+      SecurityGroupIds: 
+        - !Ref rLambdaSG

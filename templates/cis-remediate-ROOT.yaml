@@ -1,0 +1,127 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >-
+  MASTER stack, which will launch the nested stacks.
+
+Parameters:
+
+  pS3Bucket:
+    Type: String
+    Default: metric-filters
+  pS3Prefix:
+    Type: String
+    Default: templates
+  pLogGroupName:
+    Type: String
+    Default: CIS-Metric-Filters
+  pMetricNamespace:
+    Type: String
+    Default: LogMetrics
+  pSNSAlarmTopicName:
+    Type: String
+    Default: CIS-Topic
+  pOrgId:
+    Type: String
+    Default: o-81tw6tjuay
+
+Resources:
+
+  KMSSSMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-KMS.yaml
+
+  SNSStack:
+    DependsOn: KMSSSMStack
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        pSNSAlarmTopicName: !Ref pSNSAlarmTopicName
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-SNS.yaml
+
+  LogGroupStack:
+    DependsOn: SNSStack
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        pLogGroupName: !Ref pLogGroupName
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-LogGroup.yaml
+
+  CloudTrailStack:
+    DependsOn: LogGroupStack
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        pLogGroupName: !Ref pLogGroupName
+        pOrgId: !Ref pOrgId
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-CloudTrail.yaml
+
+  MetricFilterStack:
+    DependsOn: LogGroupStack
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        pLogGroupName: !Ref pLogGroupName
+        pMetricNamespace: !Ref pMetricNamespace
+        pSNSAlarmTopicName: !Ref pSNSAlarmTopicName
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-MetricFilter.yaml
+
+  VPCStack:
+    DependsOn: MetricFilterStack
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /vpc-stack.yaml
+
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-aws-support-role.yaml
