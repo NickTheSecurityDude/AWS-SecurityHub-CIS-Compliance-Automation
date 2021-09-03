@@ -107,3 +107,4 @@ aws sts get-caller-identity
 python3 cis-pci-sbp-remediate.py
 ```
 
+![All Steps ScreenShot](https://i.postimg.cc/XJbPKdRn/cis-allsteps-0.png)
