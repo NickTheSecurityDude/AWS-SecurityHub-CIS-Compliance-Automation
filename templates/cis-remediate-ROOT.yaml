@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Description: >-
+  DO NOT RUN THIS DIRECTLY, IT IS LAUNCHED FROM cis-pci-sbp-remediate.py
   ROOT stack, which will launch the nested stacks.
   This is called by and used in combination with the Python
   Script to configure an AWS account to help meet CIS, PCI
@@ -14,6 +15,11 @@ Metadata:
   # Build a fancy CloudFormation Menu
   AWS::CloudFormation::Interface:
     ParameterGroups:
+
+      - Label:
+          default: DO NOT RUN THIS DIRECTLY, IT IS LAUNCHED FROM cis-pci-sbp-remediate.py
+        Parameters:
+          - pDoNotRun
 
       - Label:
           default: S3 Bucket Parameters
@@ -46,6 +52,9 @@ Metadata:
           - pSubnet3Cidr
 
     ParameterLabels:
+
+      pDoNotRun:
+       default: Run the Python script
 
       pS3Bucket:
        default: The S3 bucket you uploaded the templates to
@@ -90,6 +99,10 @@ Metadata:
        default: Zone C Cidr, you should not need to change this
 
 Parameters:
+
+  pDoNotRun:
+    Type: String
+    Default: do-not-run-this-stack-directly
 
   pS3Bucket:
     Type: String
