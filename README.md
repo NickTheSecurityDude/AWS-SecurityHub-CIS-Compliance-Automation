@@ -110,3 +110,35 @@ python3 cis-pci-sbp-remediate.py
 ```
 
 ![All Steps ScreenShot](https://i.postimg.cc/XJbPKdRn/cis-allsteps-0.png)
+
+The script will take about 15-20 minutes to complete.
+
+You will see output similar to this:
+```
+Performing all steps
+Step 1: Launching CloudFormation Stack
+Waiting for CF Stack
+...
+Step 2: Enabling GuardDuty
+...
+Step 3: Removing default Security Group Rules
+200
+200
+Step 4: Updating Password Policy
+Step 5: Enabling S3 Secure Transport
+204
+204
+204
+Step 6: Enable PCI Standards
+...
+Waiting 1 minute for PCI standards to be enabled
+Step 7: Disable CRR Rule
+...
+Step 8: Enable VPC for Control Tower Lambda
+Wait 60 seconds for policy to become active
+Lambda CT VPC Found
+Successful
+Exiting...
+```
+
+SecurityHub will take 24 hours to update, however after a few hours if you click on the individual controls they should show as Passed/Compliant.
