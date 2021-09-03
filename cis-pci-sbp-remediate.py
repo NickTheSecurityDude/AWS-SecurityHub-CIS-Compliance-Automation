@@ -68,8 +68,8 @@ pMetricNamespace="LogMetrics"
 pSNSAlarmTopicName="CIS-Topic"
 pVPCCidr="172.30.0.0/16"
 pSubnet1Cidr="172.30.0.0/24"
-pSubnet2Cidr="172.31.0.0/24"
-pSubnet3Cidr="172.32.0.0/24"
+pSubnet2Cidr="172.30.1.0/24"
+pSubnet3Cidr="172.30.2.0/24"
 
 sts_client = boto3.client('sts')
 region=sts_client.meta.region_name
