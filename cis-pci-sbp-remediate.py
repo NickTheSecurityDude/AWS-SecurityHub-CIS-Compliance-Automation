@@ -1,47 +1,59 @@
-######################################################################################################
+#################################################################################################################
 #
 #  Script: cis-pci-sbp-remediate.py
 #  Author: NickTheSecurityDude
 #  Created: 08/20/21
-#  Updated: 08/20/21
+#  Updated: 09/03/21
 #
-#  Description: Helps automate the CIS compliance checks in SecurityHub
+#  Description: Helps automate the CIS, PCI and AWS Security Best Practice compliance checks in SecurityHub
 #
 #  Prerequisistes: 1. Enable MFA for root account
-#                  2. Upload templates folder to s3 bucket
+#                  2. Upload the templates and lambda folders to s3 bucket
+#                  3. Create a Slack channel named: security-incident-response
+#                     and create a Slack web hook
 #
 #  Recommendations: Setup accounts using Account Factory in Control Tower with no VPCs enabled
 #
 #  Instructions: 1. Enter the variables below
 #                2. Assume a role which can assume a cross account admin role in the GuardDuty
 #                   main account and target accounts
+#                3. This script can be run step by step or it can run all steps at once (option 0)
+#
+#  Notes: Occassionally and update by AWS to config rules will trigger false positive alarms.  For example
+#         while developing this AWS released a fix deployment for Lambda.2, which swapped the underlying configRule,
+#         which resulted in SecurityHub getting an access denied message for the config 
+#         rule: lambda-function-settings-check*
+#         No action is necessary to remediate these as they will fix themselves within 24 hours.
 #
 #  Disclaimer: For informational and educational purposes only, not for production use.  CIS
 #              requirements are contantly changing, changes to this script and additional 
 #              steps are necessary.
 #
-######################################################################################################
+##################################################################################################################
 
 import boto3,json,time
 
 #Required Variables
 
-# Account you are making CIS Compliant and its contact email
+# Target Account = Account to make CIS compliant
 target_acct=""
+
+# Email of target account
 target_email=""
 
-# your GuardDuty Account and its Detector ID
+# Email you want to use for SNS topics
+sns_email=""
+
+# Account ID of your GuardDuty Account, as well as the detector ID
 gd_main_acct=""
 gd_main_acct_detector_id=""
 
-# Cross account role, if you're using ControlTower, you shouldn't need to change this
+# Admin role, if you use Control Tower you can use AWSControlTowerExecution
 admin_role="AWSControlTowerExecution"
 
-# S3 bucket where you uploaded the templates/ folder
-s3_template_bucket=""
-
+# Optionally change these
+s3_template_bucket="metric-filters"
 s3_sub_folder="templates"
-
 pLogGroupName="CIS-Metric-Filters"
 pMetricNamespace="LogMetrics"
 pSNSAlarmTopicName="CIS-Topic"
@@ -78,8 +90,10 @@ session_target_iam = session_target.client('iam')
 session_target_lambda = session_target.client('lambda')
 session_target_ssm = session_target.client('ssm')
 session_target_s3 = session_target.client('s3')
+session_target_s3control = session_target.client('s3control')
 session_target_sh = session_target.client('securityhub')
 session_target_cf = session_target.client('cloudformation')
+session_target_sns = session_target.client('sns')
 
 # guardduty main
 session_gd_main=assumed_role_session('arn:aws:iam::'+gd_main_acct+':role/'+admin_role)
@@ -87,8 +101,6 @@ session_gd_main_gd=session_gd_main.client('guardduty')
 
 # Step 1
 def launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTopicName,s3_template_bucket,s3_sub_folder):
-
-  print("Creating CloudFormation Nested Stack")
 
   response = session_target_cf.create_stack(
     StackName=stack_name,
@@ -124,8 +136,9 @@ def launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTop
 
 # Step 2
 def enable_guardduty():
+  session_target=assumed_role_session('arn:aws:iam::'+target_acct+':role/'+admin_role)
+  session_target_gd=session_target.client('guardduty')
 
-  print("Create GuardDuty Detector in Target Account")
 
   #Target Account
   response=session_target_gd.create_detector(
@@ -134,8 +147,6 @@ def enable_guardduty():
   print(response)
 
   target_acct_detector_id=response['DetectorId']
-
-  print("Create GuardDuty member in GuardDuty Main Account")
 
   #Central Account
   response=session_gd_main_gd.create_members(
@@ -149,8 +160,6 @@ def enable_guardduty():
          )
   print(response)
 
-  print("Invite GuardDuty member in GuardDuty Main Account")
-
   response=session_gd_main_gd.invite_members(
            DetectorId=gd_main_acct_detector_id,
            AccountIds=[target_acct],
@@ -160,8 +169,6 @@ def enable_guardduty():
 
   print("Sleep 60 seconds so invite can arrive")
   time.sleep(60)
-
-  print("Accpet GuardDuty invitation in Target Account")
 
   #Target Account
   response=session_target_gd.list_invitations()
@@ -174,14 +181,10 @@ def enable_guardduty():
   )
   print(response)
 
-  print("GuardDuty Enabled")
-
   return 1
 
 # Step 3
 def remove_default_sg_rules():
-
-  print("Get Default Security Group")
 
   response = session_target_ec2.describe_security_groups(
     Filters=[
@@ -206,8 +209,6 @@ def remove_default_sg_rules():
       MaxResults=1000
     )  
  
-    print("Remove rules from Default Security Group")
-
     rules=response['SecurityGroupRules']
     for rule in rules:
       rule_id=rule['SecurityGroupRuleId']
@@ -226,15 +227,11 @@ def remove_default_sg_rules():
 
       print(response['ResponseMetadata']['HTTPStatusCode'])
 
-  print("Default Security Group Rules removed")
-
   return 1
 
 # Step 4
 def update_password_policy():
   
-  print("Update IAM Password Policy")
-
   response = session_target_iam.update_account_password_policy(
     MinimumPasswordLength=14,
     RequireSymbols=True,
@@ -246,15 +243,10 @@ def update_password_policy():
     PasswordReusePrevention=24
   )
 
-  print("IAM Password Policy Updated")
-
   return 1
 
 # Step 5
 def s3_force_secure_transport():
-
-  print("Get all buckets")
-
   response = session_target_s3.list_buckets()
   buckets=response['Buckets']
 
@@ -290,8 +282,6 @@ def s3_force_secure_transport():
     except:
       pass
 
-    print("Add force secure transport sid to bucket")
-
     sids.append(secure_transport_sid)
     bucket_policy={
       "Version": "2012-10-17",
@@ -300,8 +290,6 @@ def s3_force_secure_transport():
 
     #print(bucket_policy) 
 
-    print("Update bucket policy")
-
     response = session_target_s3.put_bucket_policy(
       Bucket=bucket_name,
       Policy=json.dumps(bucket_policy)
@@ -309,14 +297,21 @@ def s3_force_secure_transport():
 
     print(response['ResponseMetadata']['HTTPStatusCode']) 
 
-  print("Secure Transport required enabled on all buckets")
+    # block public access at account level
+    session_target_s3control.put_public_access_block(
+      PublicAccessBlockConfiguration={
+        'BlockPublicAcls': True,
+        'IgnorePublicAcls': True,
+        'BlockPublicPolicy': True,
+        'RestrictPublicBuckets': True
+      },
+      AccountId=target_acct
+    )
 
   return 1
 
 # Step 6
 def enable_pci_standard():
-
-  print("Enabling PCI standards for SecurityHub")
 
   arn_to_enable="arn:aws:securityhub:us-east-1::standards/pci-dss/v/3.2.1"
 
@@ -330,14 +325,10 @@ def enable_pci_standard():
 
   print(response)
 
-  print("PCI standards for SecurityHub Enabled")
-
   return 1
 
 # Step 7
 def disable_s3_crr():
-
-  print("Disable SecurityHub PCI Rule for Cross Region Replication required")
 
   arn_to_disable="arn:aws:securityhub:"+region+":"+target_acct+":control/pci-dss/v/3.2.1/PCI.S3.3"
 
@@ -349,8 +340,6 @@ def disable_s3_crr():
 
   print(response)
 
-  print("SecurityHub PCI Rule for Cross Region Replication required disabled")
-
   return 1
 
 # Step 8
@@ -359,8 +348,7 @@ def vpc_for_controltower_lambda():
   controltower_vpc_id=0
   ctv_found=0
 
-  print("Attaching VPC Access Execution Role to Lambda function")
-
+  # add policy arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole to lambda role
   response = session_target_iam.attach_role_policy(
     RoleName='aws-controltower-ForwardSnsNotificationRole',
     PolicyArn='arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole'
@@ -368,8 +356,6 @@ def vpc_for_controltower_lambda():
   print(response)
   print("Wait 60 seconds for policy to become active")
   time.sleep(60)
-
-  print("Get VPCs")
 
   response = session_target_ec2.describe_vpcs()
   vpcs=response['Vpcs']
@@ -382,9 +368,6 @@ def vpc_for_controltower_lambda():
 
   if ctv_found==1:
     print("Lambda CT VPC Found")
-
-
-    print("Get subnets")
 
     response = session_target_ec2.describe_subnets(
       Filters=[
@@ -405,8 +388,6 @@ def vpc_for_controltower_lambda():
 
     print(vpc_subnets)
 
-    print("Get Lambda Security Group from SSM")
-
     #get lambda sg ssm
     response = session_target_ssm.get_parameter(
       Name='/security-group/lambda/controltower'
@@ -415,29 +396,72 @@ def vpc_for_controltower_lambda():
     print(response['Parameter']['Value'])
     security_group_id=response['Parameter']['Value']
 
-    lambda_arn='arn:aws:lambda:'+region+':'+target_acct+':function:aws-controltower-NotificationForwarder'
-    print(lambda_arn)
+    lambda_arn_prefix='arn:aws:lambda:'+region+':'+target_acct+':function:'
+    lambda_arn_ct=lambda_arn_prefix+'aws-controltower-NotificationForwarder'
+    lambda_arn_sns=lambda_arn_prefix+'sns-to-slack'
+    #print(lambda_arn)
 
-    print("Update lambda function configuration")
- 
     response = session_target_lambda.update_function_configuration(
-      FunctionName=lambda_arn,
+      FunctionName=lambda_arn_ct,
       VpcConfig={
         'SubnetIds': vpc_subnets,
         'SecurityGroupIds': [security_group_id]
       }
     )
+    print(response)
 
-  print("Lambda function VPC access enabled")
+    response = session_target_lambda.update_function_configuration(
+      FunctionName=lambda_arn_sns,
+      VpcConfig={
+        'SubnetIds': vpc_subnets,
+        'SecurityGroupIds': [security_group_id]
+      }
+    )
+    print(response)
 
   return 1
 
+#moved to menu
+"""
+print("Launching CloudFormation Stack")
+stack_name="CIS-Remediate"
+launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTopicName,pS3Bucket,pS3Prefix)
+print("Waiting for CF Stack")
+# waiter
+waiter = session_target_cf.get_waiter('stack_create_complete')
+waiter.wait(
+  StackName=stack_name,
+  WaiterConfig={
+    'Delay': 30,
+    'MaxAttempts': 30
+  }
+)
 
-##################################
-  Begin main code
-##################################
+print("Enabling GuardDuty")
+enable_guardduty()
 
-# Display Menu
+print("Removing default Security Group Rules")
+remove_default_sg_rules()
+
+print("Updating Password Policy")
+update_password_policy()
+
+print("Enabling S3 Secure Transport")
+s3_force_secure_transport()
+
+print("Enable PCI Standards")
+enable_pci_standard()
+print("Waiting 1 minute for PCI standards to be enabled")
+time.sleep(60)
+
+print("Disable CRR Rule")
+disable_s3_crr()
+
+print("Enable VPC for Control Tower Lambda")
+vpc_for_controltower_lambda()
+"""
+
+# Menu
 menu = {}
 menu['0']="All Steps"
 menu['1']="Step 1: Launch CloudFormation Stack"
@@ -450,17 +474,14 @@ menu['7']="Step 7: Disable CRR Rule"
 menu['8']="Step 8: Enable VPC for Control Tower Lambda"
 menu['9']="Exit"
 
-# Loop for menu
 while True:
-
   options=menu.keys()
-
+  #options.sort()
   for entry in options:
     print(entry, menu[entry])
 
   selection=int(input("Please Select: "))
 
-  # If 0, then perform all steps
   if selection==0:
     print("Performing all steps")
 
@@ -469,8 +490,7 @@ while True:
     stack_name="CIS-Remediate"
     launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTopicName,s3_template_bucket,s3_sub_folder)
     print("Waiting for CF Stack")
-
-    # waiter for CloudFormation stack
+    # waiter
     waiter = session_target_cf.get_waiter('stack_create_complete')
     waiter.wait(
       StackName=stack_name,
@@ -479,7 +499,27 @@ while True:
         'MaxAttempts': 30
       }
     )
-    print("CloudFormation stack created.")
+
+    # attach policy for KMS
+    session_target_iam.attach_role_policy(
+      RoleName='aws-controltower-ConfigRecorderRole',
+      PolicyArn='arn:aws:iam::'+target_acct+':policy/kms-generate-data-key-on-master-acct'
+    )
+
+    # subscribe to sns
+    response = session_target_sns.subscribe(
+      TopicArn='arn:aws:sns:'+region+':'+target_acct+':'+pSNSAlarmTopicName,
+      Protocol='email',
+      Endpoint=sns_email,
+    )
+    print(response)
+
+    response = session_target_sns.subscribe(
+      TopicArn='arn:aws:sns:'+region+':'+target_acct+':'+pSNSAlarmTopicName,
+      Protocol='lambda',
+      Endpoint='arn:aws:lambda:'+region+':'+target_acct+':function:sns-to-slack',
+    )
+    print(response)
 
   if selection==2 or selection==0:
     print("Step 2: Enabling GuardDuty")
