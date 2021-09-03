@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Creates a IAM Support Role
+
+Metadata:
+  Identifier: cw-mf-IAM
+  CreatedOn: 2021/08/08
+  CreatedBy: Nick The Security Dude
+
+Parameters:
+  pMasterAcct:
+    Type: String
+
+Resources:
+
+  #AWS Support iam role
+  rAWSSupportRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AssumeRole
+            Effect: Allow
+            Principal:
+              AWS: !Sub ${AWS::AccountId}
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AWSSupportAccess
+
+  rCISIAMPol:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action: 'kms:GenerateDataKey'
+            Resource: !Sub 'arn:aws:kms:us-east-1:${pMasterAcct}:key/*'
+      ManagedPolicyName: kms-generate-data-key-on-master-acct

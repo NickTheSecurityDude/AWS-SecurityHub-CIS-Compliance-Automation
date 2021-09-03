@@ -1,16 +1,110 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Description: >-
-  MASTER stack, which will launch the nested stacks.
+  ROOT stack, which will launch the nested stacks.
+  This is called by and used in combination with the Python
+  Script to configure an AWS account to help meet CIS, PCI
+  and AWS Security Best Practices
+
+Metadata:
+  Identifier: cis-remediate-ROOT
+  CreatedOn: 2021/08/08
+  CreatedBy: Nick The Security Dude
+
+  # Build a fancy CloudFormation Menu
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+
+      - Label:
+          default: S3 Bucket Parameters
+        Parameters:
+          - pS3Bucket
+          - pS3Prefix
+          - pLambdaBucket
+          - pLambdaPrefix
+
+      - Label:
+          default: Account Parameters
+        Parameters:
+          - pOrgId
+          - pMasterAcct
+          - pSlackWebHook
+
+      - Label:
+          default: Metric Filter Parameters
+        Parameters:
+          - pLogGroupName
+          - pMetricNamespace
+          - pSNSAlarmTopicName
+
+      - Label:
+          default: VPC Parameters
+        Parameters:
+          - pVPCCidr
+          - pSubnet1Cidr
+          - pSubnet2Cidr
+          - pSubnet3Cidr
+
+    ParameterLabels:
+
+      pS3Bucket:
+       default: The S3 bucket you uploaded the templates to
+
+      pS3Prefix:
+       default: The folder your templates are in, you should not need to change this
+
+      pLambdaBucket:
+       default: The S3 bucket used for lambda, this can be the same as your template bucket
+
+      pLambdaPrefix:
+       default: The folder your lambda zip is in, you should not need to change this
+
+      pOrgId:
+       default: The ID of your organization, do not use a OU id
+
+      pMasterAcct:
+       default: The Account number of the master account in your organization
+
+      pSlackWebHook:
+       default: Your Slack web hook, create channel named security-incident-response
+
+      pLogGroupName:
+       default: Log group name, you should not need to change this
+
+      pMetricNamespace:
+       default: Metric Namespace, you should not need to change this
+
+      pSNSAlarmTopicName:
+       default: Metric alarm name, you should not need to change this
+
+      pVPCCidr:
+       default: VPC Cidr, you should not need to change this
+
+      pSubnet1Cidr:
+       default: Zone A Cidr, you should not need to change this
+
+      pSubnet2Cidr:
+       default: Zone B Cidr, you should not need to change this
+
+      pSubnet3Cidr:
+       default: Zone C Cidr, you should not need to change this
 
 Parameters:
 
   pS3Bucket:
     Type: String
-    Default: metric-filters
+    Description: S3 bucket where your CloudFormation templates are
   pS3Prefix:
     Type: String
     Default: templates
+
+  pLambdaBucket:
+    Type: String
+    Description: S3 bucket where your Lambda zip is
+  pLambdaPrefix:
+    Type: String
+    Default: lambda
+
   pLogGroupName:
     Type: String
     Default: CIS-Metric-Filters
@@ -22,7 +116,26 @@ Parameters:
     Default: CIS-Topic
   pOrgId:
     Type: String
-    Default: o-81tw6tjuay
+    Description: Your root Org Id
+  pMasterAcct:
+    Type: String
+    Description: Your master account Id
+  pSlackWebHook:
+    Type: String
+    Description: Your hook for Slack notifications, requires channel named  security-incident-response
+
+  pVPCCidr:
+    Type: String
+    Default: 172.30.0.0/16
+  pSubnet1Cidr:
+    Type: String
+    Default: 172.30.0.0/24
+  pSubnet2Cidr:
+    Type: String
+    Default: 172.31.0.0/24
+  pSubnet3Cidr:
+    Type: String
+    Default: 172.32.0.0/24
 
 Resources:
 
@@ -105,6 +218,11 @@ Resources:
     DependsOn: MetricFilterStack
     Type: AWS::CloudFormation::Stack
     Properties:
+      Parameters:
+        pVPCCidr: !Ref pVPCCidr
+        pSubnet1Cidr: !Ref pSubnet1Cidr
+        pSubnet2Cidr: !Ref pSubnet2Cidr
+        pSubnet3Cidr: !Ref pSubnet3Cidr
       TemplateURL: !Join
         - ''
         - - https://
@@ -112,11 +230,13 @@ Resources:
           - !Ref pS3Bucket
           - /
           - !Ref pS3Prefix
-          - /vpc-stack.yaml
+          - /cw-mf-VPC.yaml
 
   IAMStack:
     Type: AWS::CloudFormation::Stack
     Properties:
+      Parameters:
+        pMasterAcct: !Ref pMasterAcct
       TemplateURL: !Join
         - ''
         - - https://
@@ -124,4 +244,21 @@ Resources:
           - !Ref pS3Bucket
           - /
           - !Ref pS3Prefix
-          - /cw-mf-aws-support-role.yaml
+          - /cw-mf-IAM.yaml
+
+  LambdaStack:
+    DependsOn: VPCStack
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        pSlackWebHook: !Ref pSlackWebHook
+        pLambdaBucket: !Ref pLambdaBucket
+        pLambdaPrefix: !Ref pLambdaPrefix        
+      TemplateURL: !Join
+        - ''
+        - - https://
+          - !Sub s3.${AWS::Region}.amazonaws.com/
+          - !Ref pS3Bucket
+          - /
+          - !Ref pS3Prefix
+          - /cw-mf-Lambda.yaml

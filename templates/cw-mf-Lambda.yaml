@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >-
+  Creates a Lambda function, SNS Topic 
+  and gives the SNS Topic permission to invoke the Lambda
+
+Metadata:
+  Identifier: cw-mf-Lambda
+  CreatedOn: 2021/08/08
+  CreatedBy: Nick The Security Dude
+
+Parameters:
+
+  pSlackWebHook:
+    Type: String
+
+  pLambdaBucket: 
+    Type: String
+  pLambdaPrefix:
+    Type: String 
+
+Resources:
+
+  # Role for Lambda function
+  rLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+            - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+
+  # Lambda function to send messages to Slack
+  rSNSToSlackLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sns-to-slack
+      Code:
+        S3Bucket: !Ref pLambdaBucket
+        S3Key: !Sub ${pLambdaPrefix}/sns-to-slack.zip
+      Handler: sns-to-slack.lambda_handler
+      Role: !GetAtt rLambdaRole.Arn
+      Runtime: python3.9
+      Timeout: 300
+      Environment:
+        Variables:
+          URL: !Ref pSlackWebHook
+      VpcConfig:
+        SecurityGroupIds:
+          - '{{resolve:ssm:/security-group/lambda/controltower:1}}'
+        SubnetIds:
+          - '{{resolve:ssm:/subnet/1/lambda/controltower:1}}'
+          - '{{resolve:ssm:/subnet/2/lambda/controltower:1}}'
+          - '{{resolve:ssm:/subnet/3/lambda/controltower:1}}'
+
+  # Give SNS Permission to Invoke Lambda
+  rSNSFunctionInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref rSNSToSlackLambda
+      Principal: sns.amazonaws.com   
+      SourceArn: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:CIS-Topic'

@@ -1,12 +1,15 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  aaa
+  Creates a KMS key, alias and SSM parameter to store the key id
+
 Metadata:
   Identifier: cw-mf-KMS
   CreatedOn: 2021/08/8
   CreatedBy: Nick The Security Dude
+
 Resources:
 
+  # KMS Key
   rCISKey:
     Type: AWS::KMS::Key
     Properties: 
@@ -35,12 +38,14 @@ Resources:
               - kms:Describe*
             Resource: '*'
 
+  # Key Alias
   rCISKeyAlias:
     Type: AWS::KMS::Alias
     Properties: 
       AliasName: alias/cloudwatch/metricfilter/cis/key
       TargetKeyId: !Ref rCISKey
 
+  # SSM Parameter to store Key ID
   rCISKeySSM:
     Type: AWS::SSM::Parameter
     Properties: 

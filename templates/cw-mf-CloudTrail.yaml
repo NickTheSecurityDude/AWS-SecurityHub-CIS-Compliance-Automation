@@ -1,9 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  aaa
+  Creates a CloudTrail and 2 related S3 buckets 
+  as well as a role for CloudTrail
+
 Metadata:
-  Identifier: cw-mf-MetricFilter
-  CreatedOn: 2021/08/8
+  Identifier: cw-mf-CloudTrail
+  CreatedOn: 2021/08/08
   CreatedBy: Nick The Security Dude
 
 Parameters:
@@ -15,6 +17,7 @@ Parameters:
 
 Resources:
 
+  # Access Logs S3 Bucket
   rCloudTrailAccessLogsS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -29,6 +32,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
+  # S3 Bucket
   rCloudTrailS3Bucket:
     DependsOn: rCloudTrailAccessLogsS3Bucket
     Type: AWS::S3::Bucket
@@ -45,6 +49,7 @@ Resources:
       LoggingConfiguration: 
         DestinationBucketName: !Ref rCloudTrailAccessLogsS3Bucket
 
+  # Bucket Policy
   rCloudTrailS3BucketPol:
     Type: AWS::S3::BucketPolicy
     Properties: 
@@ -68,6 +73,7 @@ Resources:
               StringEquals:
                 's3:x-amz-acl': bucket-owner-full-control            
 
+  # Role for CloudTrail
   rCWRole:
     DependsOn: rCloudTrailS3BucketPol
     Type: AWS::IAM::Role
@@ -82,6 +88,7 @@ Resources:
             Action: 'sts:AssumeRole'
       RoleName: !Sub CloudWatchRoleForCloudTrail-${pLogGroupName}
 
+  # Policy for CloudTrail Role
   rCWRolePolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties: 
@@ -102,6 +109,7 @@ Resources:
       Roles: 
         -  !Ref rCWRole
 
+  # CloudTrail Trail
   rCWMFTrail:  
     DependsOn: rCWRolePolicy
     Type: AWS::CloudTrail::Trail

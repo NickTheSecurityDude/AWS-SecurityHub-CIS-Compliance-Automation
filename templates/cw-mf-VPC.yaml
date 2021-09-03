@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >-
+  Creates a VPC, and related components, for Lambda to run in.
+  Also creates an Internet Gateway so Lambda can push messages to Slack.
+  SSM Parameters are used in place of import/exports
+
+Metadata:
+  Identifier: cw-mf-VPC
+  CreatedOn: 2021/08/08
+  CreatedBy: Nick The Security Dude
+
+Parameters:
+
+  pVPCCidr:
+    Type: String
+  pSubnet1Cidr:
+    Type: String
+  pSubnet2Cidr:
+    Type: String
+  pSubnet3Cidr:
+    Type: String
+
+Resources:
+
+  # IGW for slack
+  rLambdaVPCIGW:
+    Type: AWS::EC2::InternetGateway
+
+  # VPC
+  rLambdaVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: !Ref pVPCCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: 
+        - Key: Name
+          Value: LambdaCTVPC
+
+  # Attach IGW to VPC
+  rAttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref rLambdaVPC
+      InternetGatewayId: !Ref rLambdaVPCIGW
+
+  # Route table
+  rLambdaVPCRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref rLambdaVPC
+
+  # Route
+  rLambdaVPCRoute:
+    Type: AWS::EC2::Route
+    #DependsOn: GatewayToInternet
+    Properties:
+       RouteTableId: !Ref rLambdaVPCRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId: !Ref rLambdaVPCIGW
+
+  # VPC flowlog cloudwatch LogGroup
+  rLambdaVPCFlowLogCWLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      KmsKeyId: !Join
+        - ''
+        - - !Sub arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/
+          - '{{resolve:ssm:/cloudwatch/metricfilter/cis/key:1}}'
+      RetentionInDays: 60
+
+  # VPC flowlog cloudwatch iam role
+  rLambdaVPCFlowLogCWLogGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VPCFlogLogAssumeRole
+            Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  rLambdaVPCFlowLogCWLogGroupRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VPCFlowLogCreateLogStream2014110
+            Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+      Roles:
+        -  !Ref rLambdaVPCFlowLogCWLogGroupRole
+
+  # VPC flowlog
+  rLambdaVPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties: 
+      DeliverLogsPermissionArn: !GetAtt rLambdaVPCFlowLogCWLogGroupRole.Arn
+      LogDestination: !GetAtt rLambdaVPCFlowLogCWLogGroup.Arn
+      LogDestinationType: cloud-watch-logs
+      ResourceId: !Ref rLambdaVPC
+      ResourceType: VPC
+      TrafficType: ALL
+
+  # 3 subnets
+  rLambdaSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Sub ${AWS::Region}a
+      CidrBlock: !Ref pSubnet1Cidr
+      VpcId: !Ref rLambdaVPC
+
+  rLambdaSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub ${AWS::Region}b
+      CidrBlock: !Ref pSubnet2Cidr
+      VpcId: !Ref rLambdaVPC
+
+  rLambdaSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Sub ${AWS::Region}c
+      CidrBlock: !Ref pSubnet3Cidr
+      VpcId: !Ref rLambdaVPC
+
+  # Subnet associations
+  rLambdaSubnet1Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref rLambdaVPCRouteTable
+      SubnetId: !Ref rLambdaSubnet1
+
+  rLambdaSubnet2Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rLambdaVPCRouteTable
+      SubnetId: !Ref rLambdaSubnet2
+
+  rLambdaSubnet3Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref rLambdaVPCRouteTable
+      SubnetId: !Ref rLambdaSubnet3
+
+  # SG
+  rLambdaSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Security Group for Control Tower Lambda
+      GroupName: CTLambdaSG
+      SecurityGroupEgress: 
+        -   
+          CidrIp: 0.0.0.0/0
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: tcp
+      Tags: 
+        - Key: Name
+          Value: LambdaVPC
+      VpcId: !Ref rLambdaVPC
+
+  # SSM for sg
+  rLambdaSGSSM:
+    Type: AWS::SSM::Parameter
+    Properties: 
+      Name: /security-group/lambda/controltower
+      Value: !Ref rLambdaSG
+      Type: String
+
+  # SSM for subnets
+  rLambdaSBN1SSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /subnet/1/lambda/controltower
+      Value: !Ref rLambdaSubnet1
+      Type: String
+
+  rLambdaSBN2SSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /subnet/2/lambda/controltower
+      Value: !Ref rLambdaSubnet2
+      Type: String
+
+  rLambdaSBN3SSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /subnet/3/lambda/controltower
+      Value: !Ref rLambdaSubnet3
+      Type: String
+
+  # VPC endpoint 
+  rSNSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      VpcId: !Ref rLambdaVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sns
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: 
+        - !Ref rLambdaSubnet1
+        - !Ref rLambdaSubnet2
+        - !Ref rLambdaSubnet3
+      SecurityGroupIds: 
+        - !Ref rLambdaSG
