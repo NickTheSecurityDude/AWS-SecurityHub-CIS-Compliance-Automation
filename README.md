@@ -64,6 +64,8 @@ git clone https://github.com/NickTheSecurityDude/AWS-SecurityHub-CIS-Compliance-
 cd AWS-SecurityHub-CIS-Compliance-Automation
 ```
 
+Upload the templates and lambda folders to your S3 bucket.
+
 Enter the following variables in cis-pci-sbp-remediate.py
 ```
 #Required Variables
