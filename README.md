@@ -95,9 +95,14 @@ pOrgId=""
 pSlackWebHook=""
 ```
 
-And run that script, choosing option 0 to run all steps:
+I recommond connecting to the CLI using SSO and selecting a user which can assume the admin_role you set above in the required accounts.
+
+![AWS CLI SSO ScreenShot](https://i.postimg.cc/1RpmZKmr/cis-cli-sso.png)
+
+And run the script, choosing option 0 to run all steps:
 ```
 aws configure sso
+export AWS_PROFILE=your_profile_name
 python3 cis-pci-sbp-remediate.py
 ```
 
