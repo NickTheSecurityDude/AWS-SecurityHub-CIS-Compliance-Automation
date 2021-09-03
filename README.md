@@ -141,4 +141,6 @@ Successful
 Exiting...
 ```
 
+Remember to confirm the SNS email subscription.
+
 SecurityHub will take 24 hours to update, however after a few hours if you click on the individual controls they should show as Passed/Compliant.
