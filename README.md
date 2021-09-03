@@ -16,6 +16,42 @@ For this I use a Yubi key and enable U2F hardware MFA in the AWS Console.
 
 ## Running the script
 
+```
+#################################################################################################################
+#
+#  Script: cis-pci-sbp-remediate.py
+#  Author: NickTheSecurityDude
+#  Created: 08/20/21
+#  Updated: 09/03/21
+#
+#  Description: Helps automate the CIS, PCI and AWS Security Best Practice compliance checks in SecurityHub
+#
+#  Prerequisistes: 1. Enable MFA for root account
+#                  2. Upload the templates and lambda folders to s3 bucket
+#                  3. Create a Slack channel named: security-incident-response
+#                     and create a Slack web hook
+#
+#  Recommendations: Setup accounts using Account Factory in Control Tower with no VPCs enabled
+#
+#  Instructions: 1. Enter the variables below
+#                2. Assume a role which can assume a cross account admin role in the GuardDuty
+#                   main account and target accounts
+#                3. This script can be run step by step or it can run all steps at once (option 0)
+#                DO NOT RUN THE CLOUDFORMATION STACK DIRECTLY, THIS SCRIPT WILL RUN IT
+#
+#  Notes: Occassionally and update by AWS to config rules will trigger false positive alarms.  For example
+#         while developing this AWS released a fix deployment for Lambda.2, which swapped the underlying configRule,
+#         which resulted in SecurityHub getting an access denied message for the config
+#         rule: lambda-function-settings-check*
+#         No action is necessary to remediate these as they will fix themselves within 24 hours.
+#
+#  Disclaimer: For informational and educational purposes only, not for production use.  CIS
+#              requirements are contantly changing, changes to this script and additional
+#              steps are necessary.
+#
+##################################################################################################################
+```
+
 Run the script as follows:
 
 Clone the git repo:
@@ -40,6 +76,17 @@ sns_email=""
 # Account ID of your GuardDuty Account, as well as the detector ID
 gd_main_acct=""
 gd_main_acct_detector_id=""
+
+# Admin role, if you use Control Tower you can use AWSControlTowerExecution
+admin_role="AWSControlTowerExecution"
+
+# Required CloudFormation Variables
+# Camel case used for CF variable names to match CloudFormation variable naming convention
+pS3Bucket=""
+pLambdaBucket=""
+pMasterAcct=""
+pOrgId=""
+pSlackWebHook=""
 ```
 
 And run that script, choosing option 0 to run all steps:
