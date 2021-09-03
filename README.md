@@ -103,6 +103,7 @@ And run the script, choosing option 0 to run all steps:
 ```
 aws configure sso
 export AWS_PROFILE=your_profile_name
+aws sts get-caller-identity
 python3 cis-pci-sbp-remediate.py
 ```
 
