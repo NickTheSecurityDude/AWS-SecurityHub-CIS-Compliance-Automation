@@ -18,6 +18,7 @@
 #                2. Assume a role which can assume a cross account admin role in the GuardDuty
 #                   main account and target accounts
 #                3. This script can be run step by step or it can run all steps at once (option 0)
+#                DO NOT RUN THE CLOUDFORMATION STACK DIRECTLY, THIS SCRIPT WILL RUN IT
 #
 #  Notes: Occassionally and update by AWS to config rules will trigger false positive alarms.  For example
 #         while developing this AWS released a fix deployment for Lambda.2, which swapped the underlying configRule,
@@ -51,17 +52,29 @@ gd_main_acct_detector_id=""
 # Admin role, if you use Control Tower you can use AWSControlTowerExecution
 admin_role="AWSControlTowerExecution"
 
-# Optionally change these
-s3_template_bucket="metric-filters"
-s3_sub_folder="templates"
+# Required CloudFormation Variables
+# Camel case used for CF variable names to match CloudFormation variable naming convention
+pS3Bucket=""
+pLambdaBucket=""
+pMasterAcct=""
+pOrgId=""
+pSlackWebHook=""
+
+# Optionally change these CloudFormation Variables
+pS3Prefix="templates"
+pLambdaPrefix="lambda"
 pLogGroupName="CIS-Metric-Filters"
 pMetricNamespace="LogMetrics"
 pSNSAlarmTopicName="CIS-Topic"
+pVPCCidr="172.30.0.0/16"
+pSubnet1Cidr="172.30.0.0/24"
+pSubnet2Cidr="172.31.0.0/24"
+pSubnet3Cidr="172.32.0.0/24"
 
 sts_client = boto3.client('sts')
 region=sts_client.meta.region_name
 
-s3_template_bucket_url="s3."+region+".amazonaws.com/"+s3_template_bucket
+s3_template_bucket_url="s3."+region+".amazonaws.com/"+pS3Bucket
 
 # Assume Cross Account Role Function
 def assumed_role_session(arn,ext_id=None):
@@ -100,11 +113,11 @@ session_gd_main=assumed_role_session('arn:aws:iam::'+gd_main_acct+':role/'+admin
 session_gd_main_gd=session_gd_main.client('guardduty')
 
 # Step 1
-def launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTopicName,s3_template_bucket,s3_sub_folder):
+def launch_cloudformation(stack_name):
 
   response = session_target_cf.create_stack(
     StackName=stack_name,
-    TemplateURL='https://'+s3_template_bucket_url+'/'+s3_sub_folder+'/cis-remediate-ROOT.yaml',
+    TemplateURL='https://'+s3_template_bucket_url+'/'+pS3Prefix+'/cis-remediate-ROOT.yaml',
     Capabilities=['CAPABILITY_NAMED_IAM'],
     Parameters=[
       {
@@ -121,11 +134,47 @@ def launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTop
       },
       {
         'ParameterKey': 'pS3Bucket',
-        'ParameterValue': s3_template_bucket
+        'ParameterValue': pS3Bucket
       },
       {
         'ParameterKey': 'pS3Prefix',
-        'ParameterValue': s3_sub_folder
+        'ParameterValue': pS3Prefix
+      },
+      {
+        'ParameterKey': 'pLambdaBucket',
+        'ParameterValue': pLambdaBucket
+      },
+      {
+        'ParameterKey': 'pLambdaPrefix',
+        'ParameterValue': pLambdaPrefix
+      },
+      {
+        'ParameterKey': 'pOrgId',
+        'ParameterValue': pOrgId
+      },
+      {
+        'ParameterKey': 'pMasterAcct',
+        'ParameterValue': pMasterAcct
+      },
+      {
+        'ParameterKey': 'pSlackWebHook',
+        'ParameterValue': pSlackWebHook
+      },
+      {
+        'ParameterKey': 'pVPCCidr',
+        'ParameterValue': pVPCCidr
+      },
+      {
+        'ParameterKey': 'pSubnet1Cidr',
+        'ParameterValue': pSubnet1Cidr
+      },
+      {
+        'ParameterKey': 'pSubnet2Cidr',
+        'ParameterValue': pSubnet2Cidr
+      },
+      {
+        'ParameterKey': 'pSubnet3Cidr',
+        'ParameterValue': pSubnet3Cidr
       }
     ],
     DisableRollback=True
@@ -421,46 +470,6 @@ def vpc_for_controltower_lambda():
 
   return 1
 
-#moved to menu
-"""
-print("Launching CloudFormation Stack")
-stack_name="CIS-Remediate"
-launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTopicName,pS3Bucket,pS3Prefix)
-print("Waiting for CF Stack")
-# waiter
-waiter = session_target_cf.get_waiter('stack_create_complete')
-waiter.wait(
-  StackName=stack_name,
-  WaiterConfig={
-    'Delay': 30,
-    'MaxAttempts': 30
-  }
-)
-
-print("Enabling GuardDuty")
-enable_guardduty()
-
-print("Removing default Security Group Rules")
-remove_default_sg_rules()
-
-print("Updating Password Policy")
-update_password_policy()
-
-print("Enabling S3 Secure Transport")
-s3_force_secure_transport()
-
-print("Enable PCI Standards")
-enable_pci_standard()
-print("Waiting 1 minute for PCI standards to be enabled")
-time.sleep(60)
-
-print("Disable CRR Rule")
-disable_s3_crr()
-
-print("Enable VPC for Control Tower Lambda")
-vpc_for_controltower_lambda()
-"""
-
 # Menu
 menu = {}
 menu['0']="All Steps"
@@ -488,8 +497,10 @@ while True:
   if selection==1 or selection==0:
     print("Step 1: Launching CloudFormation Stack")
     stack_name="CIS-Remediate"
-    launch_cloudformation(stack_name,pLogGroupName,pMetricNamespace,pSNSAlarmTopicName,s3_template_bucket,s3_sub_folder)
+    launch_cloudformation(stack_name)
+
     print("Waiting for CF Stack")
+
     # waiter
     waiter = session_target_cf.get_waiter('stack_create_complete')
     waiter.wait(
@@ -506,7 +517,7 @@ while True:
       PolicyArn='arn:aws:iam::'+target_acct+':policy/kms-generate-data-key-on-master-acct'
     )
 
-    # subscribe to sns
+    # subscribe to sns, email and lambda
     response = session_target_sns.subscribe(
       TopicArn='arn:aws:sns:'+region+':'+target_acct+':'+pSNSAlarmTopicName,
       Protocol='email',
