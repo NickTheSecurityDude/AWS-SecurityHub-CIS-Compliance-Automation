@@ -99,6 +99,8 @@ I recommond connecting to the CLI using SSO and selecting a user which can assum
 
 ![AWS CLI SSO ScreenShot](https://i.postimg.cc/1RpmZKmr/cis-cli-sso.png)
 
+This script has been tested in us-east-1.
+
 And run the script, choosing option 0 to run all steps:
 ```
 aws configure sso
