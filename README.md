@@ -14,6 +14,10 @@ For this I use a Yubi key and enable U2F hardware MFA in the AWS Console.
 
 ![U2F MFA ScreenShot](https://i.postimg.cc/C14B6sXJ/yubi-activate-1.png)
 
+This will script will trigger CloudWatch Alarms for CIS violations, which will then send an email alert, as well as an alert to Slack.
+
+![CIS Slack ScreenShot](https://i.postimg.cc/nhyXVhDy/cis-slack.png)
+
 ## Running the script
 
 ```
