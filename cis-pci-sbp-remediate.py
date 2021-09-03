@@ -1,4 +1,4 @@
-#################################################################################################################
+######################################################################################################################
 #
 #  Script: cis-pci-sbp-remediate.py
 #  Author: NickTheSecurityDude
@@ -28,9 +28,9 @@
 #
 #  Disclaimer: For informational and educational purposes only, not for production use.  CIS
 #              requirements are contantly changing, changes to this script and additional 
-#              steps are necessary.
+#              steps are necessary. This script launches AWS resources which may not be included in their free tier.
 #
-##################################################################################################################
+#######################################################################################################################
 
 import boto3,json,time
 
