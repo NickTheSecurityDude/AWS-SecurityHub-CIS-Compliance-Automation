@@ -26,7 +26,20 @@ cd AWS-SecurityHub-CIS-Compliance-Automation
 
 Enter the following variables in cis-pci-sbp-remediate.py
 ```
-a
+#Required Variables
+
+# Target Account = Account to make CIS compliant
+target_acct=""
+
+# Email of target account
+target_email=""
+
+# Email you want to use for SNS topics
+sns_email=""
+
+# Account ID of your GuardDuty Account, as well as the detector ID
+gd_main_acct=""
+gd_main_acct_detector_id=""
 ```
 
 And run that script, choosing option 0 to run all steps:
