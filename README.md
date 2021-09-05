@@ -144,3 +144,6 @@ Exiting...
 Remember to confirm the SNS email subscription.
 
 SecurityHub will take 24 hours to update, however after a few hours if you click on the individual controls they should show as Passed/Compliant.
+
+When you view the results again, it will look like this:
+![SecurityHub After ScreenShot](https://i.postimg.cc/QCGfRTbC/cis-securityhub-after.png)
